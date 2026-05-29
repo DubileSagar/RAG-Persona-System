@@ -89,7 +89,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     mode: str
-    sources: Optional[list] = None
+    sources: Optional[dict] = None
 
 class BuildRequest(BaseModel):
     api_key: Optional[str] = None
