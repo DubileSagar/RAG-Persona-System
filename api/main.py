@@ -102,7 +102,7 @@ def _generate_offline_answer(query: str, context: str, mode: str, persona_summar
     q_words = [w.lower().strip("?,.!") for w in query.split() if len(w) > 3]
     
     if mode == "persona":
-        lines.append("Based on the analyzed multi-pass **Persona Data**, here are the details related to your query:\n")
+        lines.append("Based on analyzed **Persona Data** matching your query:\n")
         try:
             persona_dict = json.loads(context)
             facts = persona_dict.get("facts", {})
@@ -113,33 +113,64 @@ def _generate_offline_answer(query: str, context: str, mode: str, persona_summar
             matched = False
             for k, val in facts.items():
                 if any(w in k.lower() or any(w in str(v).lower() for v in val) for w in q_words):
-                    lines.append(f"• **{k.capitalize()}**: {', '.join(val)}")
+                    lines.append(f"🔹 **{k.capitalize()}**:\n{', '.join(val)}\n")
                     matched = True
             for k, val in habits.items():
                 if any(w in k.lower() or w in str(val).lower() for w in q_words):
                     if isinstance(val, list):
-                        lines.append(f"• **{k.capitalize()}**: {', '.join(val)}")
+                        lines.append(f"🔹 **{k.capitalize()}**:\n{', '.join(val)}\n")
                     else:
-                        lines.append(f"• **{k.capitalize()}**: {val}")
+                        lines.append(f"🔹 **{k.capitalize()}**:\n{val}\n")
                     matched = True
             
             if any(w in "personality traits" for w in q_words):
-                lines.append(f"• **Personality Traits**: {', '.join(traits)}")
+                lines.append(f"🔹 **Personality Traits**:\n{', '.join(traits)}\n")
                 matched = True
             if any(w in "talk communication style tone" for w in q_words):
-                lines.append(f"• **Communication Style**: {comm.get('tone', '')} (average length: {comm.get('avg_message_length', '')} chars, emoji usage: {comm.get('emoji_usage', '')})")
+                lines.append(f"🔹 **Communication Style**:\n{comm.get('tone', '')} (avg length: {comm.get('avg_message_length', '')} chars, emoji: {comm.get('emoji_usage', '')})\n")
                 matched = True
                 
             if not matched:
-                lines.append(f"• **Extracted Facts**: {', '.join(facts.get('locations', []))}")
-                lines.append(f"• **Food & Habits**: {', '.join(habits.get('food', []))}")
-                lines.append(f"• **Routine Activities**: {', '.join(habits.get('routines', []))}")
+                lines.append(f"🔹 **Extracted Facts (Locations)**:\n{', '.join(facts.get('locations', []))}\n")
+                lines.append(f"🔹 **Food & Habits**:\n{', '.join(habits.get('food', []))}\n")
+                lines.append(f"🔹 **Routine Activities**:\n{', '.join(habits.get('routines', []))}\n")
         except Exception:
             lines.append(persona_summary)
     else:
-        lines.append("Successfully retrieved matching segments from the **FAISS Vector Index**:\n")
-        lines.append(context)
-        lines.append("\n*Note: To restore full AI-generated synthesis, please configure a Gemini API key with active quota in your `.env` file.*")
+        lines.append("Matched relevant conversation segments from the **FAISS Index**:\n")
+        
+        sections = context.split("=== SUPPORTING CONVERSATION EXCERPTS ===")
+        summaries_block = sections[0].replace("=== RELEVANT TOPIC SUMMARIES ===", "").strip()
+        excerpts_block = sections[1].strip() if len(sections) > 1 else ""
+        
+        if summaries_block:
+            lines.append("📌 **Topic Context**:")
+            s_lines = [line.strip() for line in summaries_block.split("\n") if line.strip()][:2]
+            for s in s_lines:
+                lines.append(f" {s}")
+            lines.append("")
+            
+        if excerpts_block:
+            lines.append("💬 **Verbatim Excerpt Dialogue**:")
+            e_lines = excerpts_block.split("\n")
+            excerpt_display = []
+            excerpt_count = 0
+            for line in e_lines:
+                if line.strip().startswith("[Excerpt 2]"):
+                    break
+                if line.strip().startswith("[Excerpt 1]"):
+                    continue
+                if line.strip():
+                    excerpt_display.append(f"  {line.strip()}")
+                    excerpt_count += 1
+                if excerpt_count >= 8:
+                    excerpt_display.append("  ...")
+                    break
+            
+            if excerpt_display:
+                lines.append("\n".join(excerpt_display))
+                
+        lines.append("\n*(Set a valid Gemini key in `.env` to restore full synthesis)*")
         
     return "\n".join(lines)
 
