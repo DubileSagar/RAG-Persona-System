@@ -1,5 +1,7 @@
 # KaStack RAG + Persona System
 
+![App Screenshot](screenshot.png)
+
 A production-aware **Retrieval-Augmented Generation (RAG)** system built on 11,000+ conversations. Extracts a multi-dimensional persona, detects topic boundaries semantically, and answers queries using two-stage FAISS retrieval — all without Langchain or LlamaIndex.
 
 ---
