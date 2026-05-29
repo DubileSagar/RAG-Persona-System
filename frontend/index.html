@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KaStack · RAG Chat</title>
+  <meta name="description" content="RAG-powered chat interface with persona extraction over conversation data." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #161b27;
+      --surface2: #1e2535;
+      --border: #2a3347;
+      --accent: #6c8ef5;
+      --accent2: #a78bfa;
+      --text: #e2e8f0;
+      --text-muted: #7b8db0;
+      --user-bubble: #1d2d50;
+      --bot-bubble: #1a2234;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .logo-text { font-weight: 700; font-size: 17px; letter-spacing: -0.3px; }
+    .logo-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+    .status-pill {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--text-muted);
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 4px 12px; border-radius: 20px;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--success); animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 280px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .sidebar-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-tab {
+      flex: 1; padding: 10px 0; font-size: 12px; font-weight: 600;
+      text-align: center; cursor: pointer; color: var(--text-muted);
+      border: none; background: none; transition: all 0.2s;
+      letter-spacing: 0.3px; text-transform: uppercase;
+    }
+    .sidebar-tab.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 12px; }
+    .sidebar-content::-webkit-scrollbar { width: 4px; }
+    .sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .persona-section { margin-bottom: 16px; }
+    .persona-section h4 {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-muted); margin-bottom: 8px; font-weight: 600;
+    }
+    .persona-tag {
+      display: inline-block; padding: 3px 8px; margin: 2px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; font-size: 11px; color: var(--text);
+    }
+    .persona-tag.highlight { border-color: var(--accent); color: var(--accent); }
+    .persona-kv { font-size: 12px; margin: 4px 0; color: var(--text-muted); }
+    .persona-kv span { color: var(--text); }
+
+    .checkpoint-item {
+      padding: 10px; margin-bottom: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer; transition: border-color 0.2s;
+    }
+    .checkpoint-item:hover { border-color: var(--accent); }
+    .checkpoint-id { font-size: 10px; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+    .checkpoint-summary { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+    .empty-state {
+      padding: 24px 12px; text-align: center;
+      font-size: 12px; color: var(--text-muted); line-height: 1.6;
+    }
+
+    /* ── Chat area ── */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .messages::-webkit-scrollbar { width: 5px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .msg { display: flex; gap: 12px; max-width: 720px; }
+    .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+    .msg.bot { align-self: flex-start; }
+
+    .avatar {
+      width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 600;
+    }
+    .avatar.user-av { background: linear-gradient(135deg, #3b5bdb, #845ef7); }
+    .avatar.bot-av  { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+
+    .bubble {
+      padding: 12px 16px; border-radius: var(--radius);
+      font-size: 14px; line-height: 1.65; max-width: 580px;
+    }
+    .msg.user .bubble {
+      background: var(--user-bubble);
+      border: 1px solid #2a3d6e;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.bot .bubble {
+      background: var(--bot-bubble);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .mode-badge {
+      display: inline-block; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.8px;
+      padding: 2px 7px; border-radius: 10px; margin-bottom: 6px;
+    }
+    .mode-badge.rag { background: rgba(108,142,245,0.15); color: var(--accent); }
+    .mode-badge.persona { background: rgba(167,139,250,0.15); color: var(--accent2); }
+
+    .sources-toggle {
+      margin-top: 8px; font-size: 11px; color: var(--accent);
+      cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+    }
+    .sources-panel {
+      display: none; margin-top: 8px; padding: 10px;
+      background: var(--surface2); border-radius: 8px; border: 1px solid var(--border);
+      font-size: 11px; color: var(--text-muted); line-height: 1.5;
+    }
+    .sources-panel.open { display: block; }
+    .source-section-title { font-weight: 600; color: var(--accent); margin-bottom: 4px; font-size: 10px; text-transform: uppercase; }
+    .source-item { margin-bottom: 8px; padding: 6px 8px; background: var(--surface); border-radius: 6px; }
+
+    /* Typing indicator */
+    .typing { display: flex; align-items: center; gap: 4px; padding: 12px 16px; }
+    .typing span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-muted); animation: blink 1.4s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100% { opacity: 0.3; transform: scale(0.9); } 40% { opacity: 1; transform: scale(1); } }
+
+    /* Welcome screen */
+    .welcome {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px;
+      color: var(--text-muted); text-align: center; padding: 40px;
+    }
+    .welcome-icon { font-size: 48px; margin-bottom: 8px; }
+    .welcome h2 { font-size: 20px; font-weight: 600; color: var(--text); }
+    .welcome p { font-size: 13px; max-width: 360px; line-height: 1.6; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+    .suggestion-chip {
+      padding: 7px 14px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; font-size: 12px; cursor: pointer;
+      transition: all 0.2s; color: var(--text);
+    }
+    .suggestion-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Input bar ── */
+    .input-bar {
+      padding: 16px 32px 20px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .input-wrap {
+      display: flex; gap: 10px; align-items: flex-end;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 14px;
+      transition: border-color 0.2s;
+    }
+    .input-wrap:focus-within { border-color: var(--accent); }
+    #query-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: var(--text); font-family: 'Inter', sans-serif;
+      font-size: 14px; resize: none; max-height: 120px;
+      line-height: 1.5; padding: 2px 0;
+    }
+    #query-input::placeholder { color: var(--text-muted); }
+    #send-btn {
+      width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; transition: opacity 0.2s; font-size: 16px;
+    }
+    #send-btn:hover { opacity: 0.85; }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .input-hint {
+      margin-top: 7px; font-size: 11px; color: var(--text-muted); text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🧠</div>
+    <div>
+      <div class="logo-text">KaStack RAG</div>
+      <div class="logo-sub">Persona-aware conversation intelligence</div>
+    </div>
+  </div>
+  <div class="status-pill">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" id="tab-persona" onclick="switchTab('persona')">Persona</button>
+      <button class="sidebar-tab" id="tab-checkpoints" onclick="switchTab('checkpoints')">Topics</button>
+    </div>
+    <div class="sidebar-content" id="sidebar-body">
+      <div class="empty-state">Loading persona data…</div>
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome-screen">
+        <div class="welcome-icon">💬</div>
+        <h2>Ask anything about the conversations</h2>
+        <p>This system uses RAG over 11k+ conversations with topic-aware retrieval and persona analysis.</p>
+        <div class="suggestions">
+          <div class="suggestion-chip" onclick="sendSuggestion(this)">What topics are discussed?</div>
+          <div class="suggestion-chip" onclick="sendSuggestion(this)">What kind of person is this?</div>
+          <div class="suggestion-chip" onclick="sendSuggestion(this)">What are their food preferences?</div>
+          <div class="suggestion-chip" onclick="sendSuggestion(this)">Describe their communication style</div>
+          <div class="suggestion-chip" onclick="sendSuggestion(this)">What places do they mention?</div>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea id="query-input" rows="1" placeholder="Ask about the conversations or the person…" autocomplete="off"></textarea>
+        <button id="send-btn" onclick="sendMessage()" title="Send">➤</button>
+      </div>
+      <div class="input-hint">Enter ↵ to send · Shift+Enter for new line</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = '';  // Same origin — FastAPI serves this file
+  let currentTab = 'persona';
+  let personaData = null;
+  let checkpointsData = null;
+  let isLoading = false;
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  async function init() {
+    await checkHealth();
+    await loadPersona();
+    await loadCheckpoints();
+  }
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(`${API}/health`);
+      const d = await r.json();
+      const dot = document.getElementById('status-dot');
+      const txt = document.getElementById('status-text');
+      if (d.indices_loaded && d.persona_loaded) {
+        dot.style.background = '#34d399';
+        txt.textContent = 'System ready';
+      } else {
+        dot.style.background = '#fbbf24';
+        txt.textContent = d.build_in_progress ? 'Building…' : 'Run POST /build';
+      }
+    } catch {
+      document.getElementById('status-dot').style.background = '#f87171';
+      document.getElementById('status-text').textContent = 'API offline';
+    }
+  }
+
+  async function loadPersona() {
+    try {
+      const r = await fetch(`${API}/persona`);
+      if (!r.ok) return;
+      personaData = await r.json();
+      if (currentTab === 'persona') renderPersona();
+    } catch {}
+  }
+
+  async function loadCheckpoints() {
+    try {
+      const r = await fetch(`${API}/checkpoints`);
+      if (!r.ok) return;
+      checkpointsData = await r.json();
+      if (currentTab === 'checkpoints') renderCheckpoints();
+    } catch {}
+  }
+
+  // ── Sidebar rendering ─────────────────────────────────────────────────────
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    if (tab === 'persona') renderPersona();
+    else renderCheckpoints();
+  }
+
+  function renderPersona() {
+    const el = document.getElementById('sidebar-body');
+    if (!personaData) { el.innerHTML = '<div class="empty-state">No persona data yet.<br>POST /build to generate.</div>'; return; }
+
+    const f = personaData.facts || {};
+    const h = personaData.habits || {};
+    const c = personaData.communication_style || {};
+    const p = personaData.personality || [];
+
+    let html = '';
+
+    if (p.length) {
+      html += `<div class="persona-section"><h4>Personality</h4>${p.map(t => `<span class="persona-tag highlight">${t}</span>`).join('')}</div>`;
+    }
+    if ((f.locations||[]).length) {
+      html += `<div class="persona-section"><h4>Locations</h4>${f.locations.slice(0,8).map(l=>`<span class="persona-tag">${l}</span>`).join('')}</div>`;
+    }
+    if ((f.relationships||[]).length) {
+      html += `<div class="persona-section"><h4>Relationships</h4>${f.relationships.slice(0,6).map(r=>`<span class="persona-tag">${r}</span>`).join('')}</div>`;
+    }
+    if ((h.food||[]).length) {
+      html += `<div class="persona-section"><h4>Food & Habits</h4>${h.food.slice(0,6).map(x=>`<span class="persona-tag">${x}</span>`).join('')}</div>`;
+    }
+    if ((h.routines||[]).length) {
+      html += `<div class="persona-section"><h4>Routines</h4>${h.routines.slice(0,5).map(x=>`<span class="persona-tag">${x}</span>`).join('')}</div>`;
+    }
+
+    html += `<div class="persona-section"><h4>Communication Style</h4>
+      <div class="persona-kv">Avg length: <span>${c.avg_message_length || 'N/A'} chars</span></div>
+      <div class="persona-kv">Avg words: <span>${c.avg_words_per_message || 'N/A'}</span></div>
+      <div class="persona-kv">Emoji usage: <span>${c.emoji_usage || 'N/A'}</span></div>
+      <div class="persona-kv">Question ratio: <span>${c.question_ratio ? (c.question_ratio*100).toFixed(1)+'%' : 'N/A'}</span></div>
+      <div class="persona-kv">Slang ratio: <span>${c.slang_ratio ? (c.slang_ratio*100).toFixed(1)+'%' : 'N/A'}</span></div>
+      <div class="persona-kv">Tone: <span>${c.tone || 'N/A'}</span></div>
+    </div>`;
+
+    if ((c.notable_patterns||[]).length) {
+      html += `<div class="persona-section"><h4>Notable Patterns</h4>${c.notable_patterns.map(x=>`<div class="persona-kv">• <span>${x}</span></div>`).join('')}</div>`;
+    }
+
+    el.innerHTML = html;
+  }
+
+  function renderCheckpoints() {
+    const el = document.getElementById('sidebar-body');
+    if (!checkpointsData) { el.innerHTML = '<div class="empty-state">No checkpoints yet.<br>POST /build to generate.</div>'; return; }
+
+    const topics = checkpointsData.topic_checkpoints || [];
+    const stats = checkpointsData.stats || {};
+    let html = `<div class="persona-kv" style="margin-bottom:12px">
+      ${stats.total_topic_checkpoints||0} topics · ${stats.total_structural_checkpoints||0} structural · ${stats.total_messages||0} messages
+    </div>`;
+
+    if (!topics.length) { el.innerHTML += '<div class="empty-state">No topics found.</div>'; return; }
+
+    topics.slice(0,50).forEach(tc => {
+      html += `<div class="checkpoint-item">
+        <div class="checkpoint-id">Topic #${tc.topic_id} · msgs ${tc.start_msg}–${tc.end_msg}</div>
+        <div class="checkpoint-summary">${tc.summary}</div>
+      </div>`;
+    });
+    el.innerHTML = html;
+  }
+
+  // ── Chat ──────────────────────────────────────────────────────────────────
+  function sendSuggestion(el) {
+    document.getElementById('query-input').value = el.textContent;
+    sendMessage();
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('query-input');
+    const query = input.value.trim();
+    if (!query || isLoading) return;
+
+    hideWelcome();
+    appendMessage('user', query);
+    input.value = '';
+    input.style.height = 'auto';
+
+    const typingId = appendTyping();
+    isLoading = true;
+    document.getElementById('send-btn').disabled = true;
+
+    try {
+      const r = await fetch(`${API}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, include_sources: true }),
+      });
+      removeTyping(typingId);
+
+      if (!r.ok) {
+        const err = await r.json();
+        appendMessage('bot', `⚠️ Error: ${err.detail || r.statusText}`, 'error');
+        return;
+      }
+
+      const data = await r.json();
+      appendBotMessage(data);
+    } catch (e) {
+      removeTyping(typingId);
+      appendMessage('bot', `⚠️ Network error: ${e.message}`, 'error');
+    } finally {
+      isLoading = false;
+      document.getElementById('send-btn').disabled = false;
+      input.focus();
+    }
+  }
+
+  function hideWelcome() {
+    const w = document.getElementById('welcome-screen');
+    if (w) w.remove();
+  }
+
+  function appendMessage(role, text, type='') {
+    const messages = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    const isUser = role === 'user';
+    div.innerHTML = `
+      <div class="avatar ${isUser ? 'user-av' : 'bot-av'}">${isUser ? '👤' : '🧠'}</div>
+      <div class="bubble">${escapeHtml(text)}</div>
+    `;
+    messages.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  function appendBotMessage(data) {
+    const messages = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'msg bot';
+    const modeClass = data.mode === 'persona' ? 'persona' : 'rag';
+    const modeLabel = data.mode === 'persona' ? '🧬 Persona Mode' : '🔍 RAG Mode';
+
+    let sourcesHtml = '';
+    if (data.sources) {
+      const srcId = 'src-' + Date.now();
+      let srcContent = '';
+      const topics = (data.sources.topic_summaries || []);
+      const chunks = (data.sources.raw_chunks || []);
+      if (topics.length) {
+        srcContent += `<div class="source-section-title">Topic Summaries (${topics.length})</div>`;
+        topics.forEach((t,i) => { srcContent += `<div class="source-item">[${i+1}] ${escapeHtml(t.summary)} <br><small>Score: ${t.retrieval_score.toFixed(3)}</small></div>`; });
+      }
+      if (chunks.length) {
+        srcContent += `<div class="source-section-title" style="margin-top:8px">Raw Excerpts (${chunks.length})</div>`;
+        chunks.forEach((c,i) => { srcContent += `<div class="source-item"><small>${escapeHtml(c.text.substring(0,180))}…</small></div>`; });
+      }
+      sourcesHtml = `
+        <div class="sources-toggle" onclick="toggleSources('${srcId}')">Show sources</div>
+        <div class="sources-panel" id="${srcId}">${srcContent}</div>
+      `;
+    }
+
+    div.innerHTML = `
+      <div class="avatar bot-av">🧠</div>
+      <div class="bubble">
+        <div class="mode-badge ${modeClass}">${modeLabel}</div>
+        <div>${escapeHtml(data.answer)}</div>
+        ${sourcesHtml}
+      </div>
+    `;
+    messages.appendChild(div);
+    scrollBottom();
+  }
+
+  function toggleSources(id) {
+    const panel = document.getElementById(id);
+    const toggle = panel.previousElementSibling;
+    panel.classList.toggle('open');
+    toggle.textContent = panel.classList.contains('open') ? 'Hide sources' : 'Show sources';
+  }
+
+  let typingCounter = 0;
+  function appendTyping() {
+    const id = `typing-${++typingCounter}`;
+    const messages = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'msg bot';
+    div.id = id;
+    div.innerHTML = `<div class="avatar bot-av">🧠</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+    messages.appendChild(div);
+    scrollBottom();
+    return id;
+  }
+
+  function removeTyping(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+
+  function scrollBottom() {
+    const m = document.getElementById('messages');
+    m.scrollTop = m.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Keyboard shortcut ─────────────────────────────────────────────────────
+  document.getElementById('query-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  // Auto-resize textarea
+  document.getElementById('query-input').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  init();
+</script>
+</body>
+</html>

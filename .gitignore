@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Environment
+.env
+
+# Generated pipeline artifacts (large files)
+indices/
+checkpoints.json
+persona.json
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
